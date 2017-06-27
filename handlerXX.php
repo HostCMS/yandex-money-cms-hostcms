@@ -242,45 +242,54 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
         $successUrl = $sHandlerUrl . "&payment=success";
         $failUrl = $sHandlerUrl . "&payment=fail";
 
-        if ($this->sendCheck) {
-            $oShop_Order = Core_Entity::factory('Shop_Order', $this->_shopOrder->id);
-            $aShopOrderItems = $oShop_Order->Shop_Order_Items->findAll();
+        if ($this->sendCheck)
+		{
+            $oShop_Order = $this->_shopOrder;
+            $aShopOrderItems = $oShop_Order->Shop_Order_Items->findAll(FALSE);
 
             $receipt = array(
-                'customerContact' => (isset($this->_shopOrder->email) ? $this->_shopOrder->email : (isset($this->_shopOrder->phone) ? $this->_shopOrder->phone : 'noData')),
+                'customerContact' => (
+					isset($this->_shopOrder->email)
+						? $this->_shopOrder->email
+						: (
+							isset($this->_shopOrder->phone)
+								? $this->_shopOrder->phone
+								: 'noData'
+						)
+				),
                 'items' => array(),
             );
 
-            $disc = 0;
-            $osum = 0;
+			// Расчет сумм скидок, чтобы потом вычесть из цены каждого товара
+            $disc = $osum = 0;
             foreach ($aShopOrderItems as $kk => $item) {
                 if ($item->price < 0) {
-                    $disc -= $item->price;
+                    $disc -= $item->getAmount();
                     unset($aShopOrderItems[$kk]);
                 } else {
                     if ($item->shop_item_id)
-                        $osum += $item->price;
+                        $osum += $item->getAmount();
                 }
             }
 
             unset($item);
-            $disc = abs($disc)/$osum;
-            print_r($disc);
-            foreach ($aShopOrderItems as $item) {
+            $disc = abs($disc) / $osum;
+
+            foreach ($aShopOrderItems as $item)
+			{
                 $tax_id = false;
                 if ($item->shop_item_id) {
-                    $oShop_Item = Core_Entity::factory('Shop_Item', $item->shop_item_id);
-                    $tax_id = $oShop_Item->shop_tax_id;
+                    $tax_id = $item->Shop_Item->shop_tax_id;
                 }
 
-                if (strpos('Доставка', $item->name) != false) {
+                /*if (strpos('Доставка', $item->name) != false) {
 
-                }
+                }*/
 
                 $receipt['items'][] = array(
                     'quantity' => $item->quantity,
                     'text' => substr($item->name, 0, 128),
-                    'tax' => ($tax_id && isset($this->kassaTaxRates[$tax_id]) ? $this->kassaTaxRates[$tax_id] : $this->kassaTaxRateDefault),
+                    'tax' => Core_Array::get($this->kassaTaxRates, $tax_id, $this->kassaTaxRateDefault),
                     'price' => array(
                         'amount' => number_format($item->getAmount() * ($item->shop_item_id ? 1 - $disc : 1), 2, '.', ''),
                         'currency' => 'RUB'
@@ -297,26 +306,26 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
                 <input type="hidden" name="ShopID" value="<?php echo $this->ym_shopid?>">
                 <input type="hidden" name="CustomerNumber" value="<?php echo (is_null($oSiteuser) ? 0 : $oSiteuser->id)?>">
                 <input type="hidden" name="orderNumber" value="<?php echo $this->_shopOrder->id?>">
-                <input type="hidden" name="shopSuccessURL" value="<?php echo $successUrl?>">
-                <input type="hidden" name="shopFailURL" value="<?php echo $failUrl?>">
+                <input type="hidden" name="shopSuccessURL" value="<?php echo htmlspecialchars($successUrl)?>">
+                <input type="hidden" name="shopFailURL" value="<?php echo htmlspecialchars($failUrl)?>">
                 <input type="hidden" name="cms_name" value="hostcms">
-                <?php if (isset ($this->_shopOrder->email)){ ?> <input type="hidden" name="cps_email" value="<?php echo $this->_shopOrder->email;?>"> <?php } ?>
-                <?php if (isset ($this->_shopOrder->phone)){ ?> <input type="hidden" name="cps_phone" value="<?php echo $this->_shopOrder->phone;?>"> <?php } ?>
-                <?php if (isset ($this->sendCheck) && $this->sendCheck){ ?> <input type="hidden" name="ym_merchant_receipt" value='<?php echo json_encode($receipt);?>'> <?php } ?>
+                <?php if (isset ($this->_shopOrder->email)){ ?> <input type="hidden" name="cps_email" value="<?php echo htmlspecialchars($this->_shopOrder->email)?>"> <?php } ?>
+                <?php if (isset ($this->_shopOrder->phone)){ ?> <input type="hidden" name="cps_phone" value="<?php echo htmlspecialchars($this->_shopOrder->phone)?>"> <?php } ?>
+                <?php if (isset ($this->sendCheck) && $this->sendCheck){ ?> <input type="hidden" name="ym_merchant_receipt" value="<?php echo htmlspecialchars(json_encode($receipt))?>"><?php } ?>
 
             <?php }else {?>
-                <input type="hidden" name="receiver" value="<?php echo $this->ym_account?>">
-                <input type="hidden" name="formcomment" value="<?php echo $sSiteAlias?>">
-                <input type="hidden" name="short-dest" value="<?php echo $sSiteAlias?>">
+                <input type="hidden" name="receiver" value="<?php echo htmlspecialchars($this->ym_account)?>">
+                <input type="hidden" name="formcomment" value="<?php echo htmlspecialchars($sSiteAlias)?>">
+                <input type="hidden" name="short-dest" value="<?php echo htmlspecialchars($sSiteAlias)?>">
                 <input type="hidden" name="writable-targets" value="false">
                 <input type="hidden" name="comment-needed" value="true">
                 <input type="hidden" name="label" value="<?php echo $this->_shopOrder->id?>">
                 <input type="hidden" name="quickpay-form" value="shop">
-                <input type="hidden" name="successUrl" value="<?php echo $successUrl?>">
+                <input type="hidden" name="successUrl" value="<?php echo htmlspecialchars($successUrl)?>">
 
                 <input type="hidden" name="targets" value="Заказ <?php echo $this->_shopOrder->id?>">
                 <input type="hidden" name="sum" value="<?php echo $sum?>" data-type="number" >
-                <input type="hidden" name="comment" value="<?php echo $this->_shopOrder->description?>" >
+                <input type="hidden" name="comment" value="<?php echo htmlspecialchars($this->_shopOrder->description)?>" >
                 <input type="hidden" name="need-fio" value="true">
                 <input type="hidden" name="need-email" value="true" >
                 <input type="hidden" name="need-phone" value="false">
